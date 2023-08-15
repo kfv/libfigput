@@ -130,15 +130,15 @@ put_config(struct figput_config options[static 1], const char *path,
 
 	/* Reading options from processing_options */
 	bequals =
-            (processing_options & FIGPAR_BREAK_ON_EQUALS)    == 0 ? 0 : 1;
+            (processing_options & FIGPUT_BREAK_ON_EQUALS)    == 0 ? 0 : 1;
 	bsemicolon =
-	    (processing_options & FIGPAR_BREAK_ON_SEMICOLON) == 0 ? 0 : 1;
+	    (processing_options & FIGPUT_BREAK_ON_SEMICOLON) == 0 ? 0 : 1;
 	case_sensitive =
-	    (processing_options & FIGPAR_CASE_SENSITIVE)     == 0 ? 0 : 1;
+	    (processing_options & FIGPUT_CASE_SENSITIVE)     == 0 ? 0 : 1;
 	require_equals =
-	    (processing_options & FIGPAR_REQUIRE_EQUALS)     == 0 ? 0 : 1;
+	    (processing_options & FIGPUT_REQUIRE_EQUALS)     == 0 ? 0 : 1;
 	strict_equals =
-	    (processing_options & FIGPAR_STRICT_EQUALS)      == 0 ? 0 : 1;
+	    (processing_options & FIGPUT_STRICT_EQUALS)      == 0 ? 0 : 1;
 
 	/* Writing options from put_options */
 	backup   = (put_options & FIGPUT_SAVE_BACKUP)        == 0 ? 0 : 1;
