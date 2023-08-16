@@ -212,8 +212,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			goto put_config_end_statement;
 
 		/* Get the current offset as start of directive */
-		startd = lseek(fd, 0, SEEK_CUR) - 1;
-		if (startd == -1) {
+		if ((startd == lseek(fd, 0, SEEK_CUR)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
@@ -241,8 +240,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			goto put_config_eof;
 
 		/* Go back to the beginning of the directive */
-		error = (int)lseek(fd, startd, SEEK_SET);
-		if (error == (startd - 1)) {
+		if ((error == lseek(fd, startd, SEEK_SET)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
@@ -344,8 +342,7 @@ put_config(struct figput_config options[static 1], const char *path,
 		}
 
 		/* Get the current offset as start of value */
-		startv = lseek(fd, 0, SEEK_CUR) - 1;
-		if (startv == -1) {
+		if ((startv = lseek(fd, 0, SEEK_CUR)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
@@ -378,8 +375,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			}
 
 			/* Get the current offset as last char read */
-			curpos = lseek(fd, 0, SEEK_CUR) - 1;
-			if (curpos == -1) {
+			if ((curpos = lseek(fd, 0, SEEK_CUR)) == -1) {
 				rv = -1;
 				goto put_config_cleanup;
 			}
@@ -388,8 +384,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			 * Seek back to test whether last char is escaped with
 			 * backslash (making it part of value).
 			 */
-			error = (int)lseek(fd, -2, SEEK_CUR);
-			if (error == -3) {
+			if ((error = lseek(fd, -2, SEEK_CUR)) == -1) {
 				rv = -1;
 				goto put_config_cleanup;
 			}
@@ -398,9 +393,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			/* Count how many backslashes there are (0 or more) */
 			for (n = 0; *p == '\\'; n++) {
 				/* Move back another byte */
-				error = (int)lseek(fd, -2,
-						   SEEK_CUR);
-				if (error == -3) {
+				if ((error = lseek(fd, -2, SEEK_CUR)) == -1) {
 					rv = -1;
 					goto put_config_cleanup;
 				}
@@ -408,8 +401,7 @@ put_config(struct figput_config options[static 1], const char *path,
 			}
 
 			/* Return to previous position of last char read */
-			error = (int)lseek(fd, curpos, SEEK_SET);
-			if (error == (curpos - 1)) {
+			if ((error = lseek(fd, curpos, SEEK_SET)) == -1) {
 				rv = -1;
 				goto put_config_cleanup;
 			}
@@ -448,15 +440,13 @@ put_config(struct figput_config options[static 1], const char *path,
 		}
 
 		/* Get the current offset as value end */
-		endv = lseek(fd, 0, SEEK_CUR) - 1;
-		if (endv == -1) {
+		if ((endv = lseek(fd, 0, SEEK_CUR)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
 
 		/* Move offset back to the beginning of the value */
-		error = (int)lseek(fd, startv, SEEK_SET);
-		if (error == (startv - 1)) {
+		if ((error = lseek(fd, startv, SEEK_SET)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
@@ -499,8 +489,7 @@ put_config_have_value:
 		}
 
 		/* Get the current offset as statement end */
-		endpos = lseek(fd, 0, SEEK_CUR) - 1;
-		if (endpos == -1) {
+		if ((endpos = lseek(fd, 0, SEEK_CUR)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
@@ -542,8 +531,7 @@ put_config_eof:
 		}
 
 		/* Go back to the beginning of the statement */
-		error = (int)lseek(fd, startpos, SEEK_SET);
-		if (error == (startpos - 1)) {
+		if ((error = lseek(fd, startpos, SEEK_SET)) == -1) {
 			rv = -1;
 			goto put_config_cleanup;
 		}
