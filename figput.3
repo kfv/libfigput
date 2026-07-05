@@ -25,28 +25,248 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd May 13, 2022
+.Dd July 5, 2026
 .Dt FIGPUT 3
 .Os
 .Sh NAME
-.Nm figput
+.Nm figput ,
+.Nm put_config ,
+.Nm set_config_option
 .Nd configuration file modification library
 .Sh LIBRARY
 .Lb libfigput
 .Sh SYNOPSIS
 .In figput.h
-.\" functions here
+.Ft int
+.Fo put_config
+.Fa "struct figput_config options[]"
+.Fa "const char *path"
+.Fa "uint16_t processing_options"
+.Fa "uint16_t put_options"
+.Fc
+.Ft int
+.Fo set_config_option
+.Fa "struct figput_config options[]"
+.Fa "const char *directive"
+.Fa "union figput_cfgvalue *value"
+.Fc
 .Sh DESCRIPTION
 The
 .Nm
 library provides a light-weight,
 portable framework for modifying configuration files.
-.\" more required
+It is the write-side complement to
+.Xr figpar 3 :
+where that library reads directives and values,
+.Nm
+edits them in place,
+adds directives that are absent,
+and removes directives that are no longer wanted,
+while preserving comments,
+blank lines,
+statement ordering,
+and the formatting of untouched statements.
+.Pp
+Configuration directives,
+types,
+actions,
+and results are described by an array of data structures defined in
+.In figput.h :
+.Bd -literal -offset indent
+struct figput_config {
+    enum figput_cfgtype		type;		/* value type */
+    const char			*directive;	/* keyword */
+    union figput_cfgvalue	value;		/* value to write */
+    uint8_t			action;		/* action to perform */
+    uint16_t			result;		/* NB: set by put_config */
+    uint32_t			line;		/* NB: set by put_config */
+
+    /* Reserved for a future custom serialiser; leave NULL */
+    int (*write)(struct figput_config *option);
+};
+.Ed
+.Pp
+The array is terminated by an entry whose
+.Va directive
+member is
+.Dv NULL .
+.Pp
+When a value is written,
+it is always taken from the
+.Va value.str
+member as a null-terminated string,
+regardless of
+.Va type ;
+the type governs only whether the value is quoted on output.
+Callers therefore stringify numeric and boolean values themselves,
+which keeps the on-disk spelling entirely under the caller's control.
+.Pp
+The
+.Va action
+member of each option selects one of:
+.Bl -tag -width FIGPUT_ACTION_SET_VALUE
+.It Dv FIGPUT_ACTION_SET_VALUE
+Set the directive to
+.Va value.str ,
+editing it in place if it already exists or appending it to the file if it does
+not.
+This is the default
+.Pq zero
+action.
+.It Dv FIGPUT_ACTION_CHECK
+Report,
+via
+.Va result ,
+whether the current value differs from
+.Va value ,
+without modifying the file.
+.It Dv FIGPUT_ACTION_REMOVE
+Delete the directive from the file.
+.El
+.Pp
+On return,
+the
+.Va result
+member of each processed option is set to a mask of:
+.Bl -tag -width FIGPUT_DIRECTIVE_REMOVED
+.It Dv FIGPUT_DIRECTIVE_FOUND
+The directive was present in the file.
+.It Dv FIGPUT_VALUE_CHANGED
+The value was
+.Pq or would be, for Dv FIGPUT_ACTION_CHECK
+changed.
+.It Dv FIGPUT_DIRECTIVE_ADDED
+The directive was absent and has been appended.
+.It Dv FIGPUT_DIRECTIVE_REMOVED
+The directive was present and has been removed.
+.El
+.Pp
+The
+.Va line
+member is set to the line number of the first match,
+or zero if the directive was not found.
+.Pp
+The
+.Fa processing_options
+argument to
+.Fn put_config
+is a mask of bit fields controlling how the file is tokenised.
+These flags have exactly the meaning documented for the corresponding
+.Dv FIGPAR_*
+flags in
+.Xr figpar 3 ,
+and must match those used to parse the same file:
+.Pp
+.Bl -tag -width FIGPUT_BREAK_ON_SEMICOLON -compact
+.It Dv FIGPUT_BREAK_ON_EQUALS
+.It Dv FIGPUT_BREAK_ON_SEMICOLON
+.It Dv FIGPUT_CASE_SENSITIVE
+.It Dv FIGPUT_REQUIRE_EQUALS
+.It Dv FIGPUT_STRICT_EQUALS
+.El
+.Pp
+Unlike
+.Xr figpar 3 ,
+directives are matched exactly rather than with
+.Xr fnmatch 3 ,
+since a glob pattern is not a writable target.
+.Pp
+The
+.Fa put_options
+argument is a mask of bit fields controlling how output is written:
+.Bl -tag -width FIGPUT_NO_SAVE_DUPLICATES
+.It Dv FIGPUT_NO_SAVE_DEFAULTS
+Do not rewrite a directive whose new value is identical to the value already
+present in the file.
+.It Dv FIGPUT_NO_SAVE_DUPLICATES
+Abort with an error if a directive being modified appears more than once in the
+file.
+.It Dv FIGPUT_SAVE_ALLOW_EMPTY
+Permit a
+.Dv FIGPUT_ACTION_SET_VALUE
+option to carry an empty value.
+Without this flag,
+an empty value for any type other than
+.Dv FIGPUT_TYPE_NONE
+is an error.
+.It Dv FIGPUT_SAVE_BACKUP
+Before replacing the original,
+copy it to a file with the same name plus a
+.Ql .bak
+suffix.
+.It Dv FIGPUT_SAVE_UNQUOTED
+Write string values verbatim,
+without adding surrounding quotes or escapes.
+.El
+.Pp
+.Fn put_config
+replaces the file atomically.
+Output is written to a temporary file created in the same directory as
+.Fa path ,
+flushed to stable storage with
+.Xr fsync 2 ,
+given the mode
+.Pq and, where permitted, the ownership
+of the original,
+and then
+.Xr rename 2 Ap d
+over it.
+If any error occurs the original file is left untouched and the temporary file
+is removed.
+.Pp
+.Fn set_config_option
+traverses the options array and,
+for the first option whose
+.Fa directive
+matches via
+.Xr strcmp 3 ,
+stages
+.Fa value
+into that option's
+.Va value
+member.
+It returns 1 on success,
+or 0 if no matching directive was found or an argument was
+.Dv NULL .
+.Sh RETURN VALUES
+.Rv -std put_config
+.Sh ERRORS
+In addition to the errors documented for
+.Xr open 2 ,
+.Xr read 2 ,
+.Xr write 2 ,
+.Xr fstat 2 ,
+.Xr mkstemp 3 ,
+.Xr realpath 3 ,
+and
+.Xr rename 2 ,
+.Fn put_config
+may fail if:
+.Bl -tag -width Er
+.It Bq Er EINVAL
+The
+.Fa options
+or
+.Fa path
+argument was
+.Dv NULL ,
+.Fa path
+did not resolve to a regular file,
+or a
+.Dv FIGPUT_ACTION_SET_VALUE
+option carried an empty value without
+.Dv FIGPUT_SAVE_ALLOW_EMPTY .
+.It Bq Er EEXIST
+.Dv FIGPUT_NO_SAVE_DUPLICATES
+was set and a modified directive appeared more than once.
+.El
+.Sh SEE ALSO
+.Xr figpar 3
 .Sh HISTORY
 The
 .Nm
 library first appeared in
-.Fx 14.0 .
+.Fx 16.0 .
 .Sh AUTHORS
 .An Devin Teske Aq dteske@FreeBSD.org
 .An Faraz Vahedi Aq kfv@kfv.io

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 2022 Devin Teske <dteske@FreeBSD.org>
- * Copyright (c) 2022 Faraz Vahedi <kfv@kfv.io>
+ * Copyright (c) 2015-2026 Devin Teske <dteske@FreeBSD.org>
+ * Copyright (c) 2015-2026 Faraz Vahedi <kfv@kfv.io>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,34 +30,40 @@
 
 #include <sys/types.h>
 
+#include <stdint.h>
+
 /*
  * Union for storing various types of data in a single common container.
+ *
+ * NB: When writing a value with put_config(), the caller supplies the value as
+ * a null-terminated string via the `str' member regardless of `type'; the type
+ * only governs whether the value is quoted on output (see put_config() below).
  */
 union figput_cfgvalue {
-    void		*data;		/* Pointer to NUL-terminated string */
-    char		*str;		/* Pointer to NUL-terminated string */
-    char		**strarray;	/* Pointer to an array of strings */
-    int32_t		num;		/* Signed 32-bit integer value */
-    uint32_t	u_num;		/* Unsigned 32-bit integer value */
-    uint32_t	boolean:1;	/* Boolean integer value (0 or 1) */
+	void		*data;		/* Pointer to null-terminated string */
+	char		*str;		/* Pointer to null-terminated string */
+	char		**strarray;	/* Pointer to an array of strings */
+	int32_t		num;		/* Signed 32-bit integer value */
+	uint32_t	u_num;		/* Unsigned 32-bit integer value */
+	uint32_t	boolean:1;	/* Boolean integer value (0 or 1) */
 };
 
 /*
  * Option types (based on above cfgvalue union)
  */
 enum figput_cfgtype {
-    FIGPUT_TYPE_NONE		= 0x0000, /* directives with no value */
-    FIGPUT_TYPE_BOOL		= 0x0001, /* boolean */
-    FIGPUT_TYPE_INT		= 0x0002, /* signed 32 bit integer */
-    FIGPUT_TYPE_UINT		= 0x0004, /* unsigned 32 bit integer */
-    FIGPUT_TYPE_STR		= 0x0008, /* string pointer */
-    FIGPUT_TYPE_STRARRAY	= 0x0010, /* string array pointer */
-    FIGPUT_TYPE_DATA1		= 0x0020, /* void data type-1 (open) */
-    FIGPUT_TYPE_DATA2		= 0x0040, /* void data type-2 (open) */
-    FIGPUT_TYPE_DATA3		= 0x0080, /* void data type-3 (open) */
-    FIGPUT_TYPE_RESERVED1	= 0x0100, /* reserved data type-1 */
-    FIGPUT_TYPE_RESERVED2	= 0x0200, /* reserved data type-2 */
-    FIGPUT_TYPE_RESERVED3	= 0x0400, /* reserved data type-3 */
+	FIGPUT_TYPE_NONE	    = 0x0000, /* directives with no value */
+	FIGPUT_TYPE_BOOL	    = 0x0001, /* boolean */
+	FIGPUT_TYPE_INT		    = 0x0002, /* signed 32 bit integer */
+	FIGPUT_TYPE_UINT	    = 0x0004, /* unsigned 32 bit integer */
+	FIGPUT_TYPE_STR		    = 0x0008, /* string pointer */
+	FIGPUT_TYPE_STRARRAY	= 0x0010, /* string array pointer */
+	FIGPUT_TYPE_DATA1	    = 0x0020, /* void data type-1 (open) */
+	FIGPUT_TYPE_DATA2	    = 0x0040, /* void data type-2 (open) */
+	FIGPUT_TYPE_DATA3	    = 0x0080, /* void data type-3 (open) */
+	FIGPUT_TYPE_RESERVED1	= 0x0100, /* reserved data type-1 */
+	FIGPUT_TYPE_RESERVED2	= 0x0200, /* reserved data type-2 */
+	FIGPUT_TYPE_RESERVED3	= 0x0400, /* reserved data type-3 */
 };
 
 /*
@@ -66,12 +72,12 @@ enum figput_cfgtype {
 #define FIGPUT_NO_SAVE_DEFAULTS     0x0001 /* Error if new value == default */
 #define FIGPUT_NO_SAVE_DUPLICATES   0x0002 /* Error if directive found twice */
 #define FIGPUT_SAVE_ALLOW_EMPTY     0x0004 /* Directive can have no value if
-					    * type is one of:
-					    *   - FP_TYPE_NONE
-					    *   - FP_TYPE_BOOL
-					    * NB: for latter, default must be
-					    * false, otherwise raise error
-					    */
+                    					    * type is one of:
+                    					    *   - FP_TYPE_NONE
+                    					    *   - FP_TYPE_BOOL
+                    					    * NB: for latter, default must be
+                    					    * false, otherwise raise error
+                    					    */
 #define FIGPUT_SAVE_BACKUP          0x0008 /* Back up config file */
 #define FIGPUT_SAVE_UNQUOTED        0x0010 /* Save values without quotes */
 
@@ -103,23 +109,24 @@ enum figput_cfgtype {
  * Anatomy of a config file option for writing
  */
 struct figput_config {
-	enum figput_cfgtype	type;		/* Option value type */
-	const char		*directive;	/* config file keyword */
-	union figput_cfgvalue	value;		/* NB: for action to write */
-	uint8_t			action;		/* Action to perform */
-	uint16_t		result;		/* NB: set by put_config */
-	uint32_t		line;		/* NB: set by put_config */
+	enum figput_cfgtype	    type;		/* Option value type */
+	const char		        *directive;	/* config file keyword */
+	union figput_cfgvalue	value;		/* NB: value to write */
+	uint8_t			        action;		/* Action to perform */
+	uint16_t		        result;		/* NB: set by put_config */
+	uint32_t		        line;		/* NB: set by put_config */
 
 	/*
-	 * Function pointer; how to write the directive
+	 * Function pointer; reserved for a future custom value serialiser.
+	 * Not yet honored by put_config(); leave NULL.
 	 */
 	int (*write)(struct figput_config *option);
 };
 
 __BEGIN_DECLS
-int	put_config(struct figput_config _options[static 1], const char *_path,
+int	put_config(struct figput_config _options[], const char *_path,
 	    uint16_t _processing_options, uint16_t _put_options);
-int	set_config_option(struct figput_config _options[static 1],
+int	set_config_option(struct figput_config _options[],
 	    const char *_directive, union figput_cfgvalue *_value);
 __END_DECLS
 

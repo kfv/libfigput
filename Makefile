@@ -5,7 +5,8 @@ LIB=		figput
 SHLIB_MAJOR=	0
 INCS=		figput.h
 MAN=		figput.3
-#?MLINKS=		figput.3 emit_config.3
+MLINKS=		figput.3 put_config.3		\
+		figput.3 set_config_option.3
 
 CFLAGS+=	-I${.CURDIR}
 
