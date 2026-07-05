@@ -55,6 +55,7 @@ struct figput_stmt {
 	size_t	dir_end;	/* one past the last byte of the directive */
 	size_t	val_start;	/* first byte of the value (== val_end if none) */
 	size_t	val_end;	/* one past last byte of value (whitespace trimmed) */
+	size_t	term;		/* index of the terminator (`\n', `#', `;', or EOF) */
 	size_t	line_end;	/* one past the terminating newline (for removal) */
 	uint32_t line;		/* 1-based line number of the directive */
 	int	have_value;	/* nonzero if a value was present */
@@ -375,7 +376,8 @@ figput_scan(const char *buf, size_t len, size_t *ip, uint32_t *linep,
 			st->val_end--;
 	}
 
-	/* Record the end of the physical line (for whole-line removal) */
+	/* Record the terminator position and the end of the physical line */
+	st->term = i;
 	st->line_end = i;
 	while (st->line_end < len && buf[st->line_end] != '\n')
 		st->line_end++;
@@ -576,18 +578,77 @@ put_config(struct figput_config options[], const char *path,
 		option->result |= FIGPUT_DIRECTIVE_FOUND;
 
 		if (option->action == FIGPUT_ACTION_REMOVE) {
-			/*
-			 * Drop the whole physical line.  Clamp the start of the
-			 * dropped region to the write cursor: with
-			 * FIGPUT_BREAK_ON_SEMICOLON an earlier statement on the
-			 * same line may already have been emitted (wc past
-			 * line_start), and the length must not wrap.
-			 */
-			size_t rm = st.line_start < wc ? wc : st.line_start;
+			size_t rm_start;
+			size_t rm_end;
+			size_t k;
+			int done = 0;
+			int first_on_line = 1;
 
-			if (figput_emit(tmpfd, buf + wc, rm - wc, &last_ch) != 0)
+			/*
+			 * Is this the first statement on its physical line?
+			 * With FIGPUT_BREAK_ON_SEMICOLON an earlier statement
+			 * may precede it on the same line.
+			 */
+			for (k = st.line_start; k < st.dir_start; k++)
+				if (!isspace((unsigned char)buf[k])) {
+					first_on_line = 0;
+					break;
+				}
+
+			/*
+			 * If a further statement follows on the same line
+			 * (terminator is a semicolon with a directive after
+			 * it), drop this statement and the trailing separator,
+			 * leaving the neighbour intact.
+			 */
+			if (bsemicolon && st.term < buflen &&
+			    buf[st.term] == ';') {
+				size_t f = st.term + 1;
+
+				while (f < buflen &&
+				    isspace((unsigned char)buf[f]) &&
+				    buf[f] != '\n')
+					f++;
+				if (f < buflen && buf[f] != '\n' &&
+				    buf[f] != '#') {
+					rm_start = st.dir_start;
+					rm_end = f;
+					done = 1;
+				}
+			}
+
+			if (!done && first_on_line) {
+				/* Alone on the line: drop the whole line */
+				rm_start = st.line_start;
+				rm_end = st.line_end;
+			} else if (!done) {
+				/*
+				 * Last on a shared line: drop the preceding
+				 * separator (whitespace, `;', whitespace) along
+				 * with this statement, keeping the terminator.
+				 */
+				size_t s = st.dir_start;
+
+				while (s > st.line_start &&
+				    isspace((unsigned char)buf[s - 1]))
+					s--;
+				if (s > st.line_start && buf[s - 1] == ';')
+					s--;
+				while (s > st.line_start &&
+				    isspace((unsigned char)buf[s - 1]))
+					s--;
+				rm_start = s;
+				rm_end = st.term;
+			}
+
+			/* Never rewind before already-emitted bytes */
+			if (rm_start < wc)
+				rm_start = wc;
+			if (figput_emit(tmpfd, buf + wc, rm_start - wc,
+			    &last_ch) != 0)
 				goto cleanup;
-			wc = st.line_end;
+			if (rm_end > wc)
+				wc = rm_end;
 			option->result |= FIGPUT_DIRECTIVE_REMOVED;
 			continue;
 		}
